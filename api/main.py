@@ -7,6 +7,12 @@ from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, Tran
 from youtube_transcript_api.formatters import TextFormatter, SRTFormatter
 from typing import Optional
 import json
+import sys
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -55,102 +61,89 @@ def create_youtube_link(video_id: str, timestamp: float) -> str:
     """Create a YouTube link that starts at a specific timestamp."""
     return f"https://youtube.com/watch?v={video_id}&t={int(timestamp)}s"
 
-def get_user_friendly_error(e: Exception, video_id: str) -> str:
-    """Convert API errors to user-friendly messages."""
-    if isinstance(e, TranscriptsDisabled):
-        return (
-            "This video has transcripts disabled. Try these example videos instead:\n"
-            "• TED Talk: https://www.youtube.com/watch?v=1Evwgu369Jw\n"
-            "• Python Tutorial: https://www.youtube.com/watch?v=_uQrJ0TkZlc\n"
-            "• JavaScript Tutorial: https://www.youtube.com/watch?v=th5_9woFJmk\n\n"
-            "Note: If you need transcripts from a specific video, try:\n"
-            "1. Checking if the video has closed captions enabled\n"
-            "2. Using a video from the same channel that has captions\n"
-            "3. Looking for an alternative video with similar content"
-        )
-    elif isinstance(e, NoTranscriptFound):
-        return (
-            "No English transcript found for this video. The video might:\n"
-            "1. Not have any captions\n"
-            "2. Only have auto-generated captions which are not accessible\n"
-            "3. Have captions in other languages only"
-        )
-    elif isinstance(e, VideoUnavailable):
-        return f"The video ID {video_id} does not exist or is private."
-    else:
-        return str(e)
-
 @app.post("/api/transcript")
 async def get_transcript(video: VideoURL):
     try:
         video_id = extract_video_id(video.url)
+        logger.debug(f"Extracted video ID: {video_id}")
         
         try:
-            # First try to get English transcript
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
-        except Exception as e1:
-            try:
-                # If English fails, try auto-generated English
-                transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en-US'])
-            except Exception as e2:
-                try:
-                    # If that fails too, get all available transcripts and use the first one
-                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-                    transcript = transcript_list.find_transcript(['en']).translate('en').fetch()
-                except Exception as e3:
-                    # Get a user-friendly error message
-                    error_msg = get_user_friendly_error(e3, video_id)
-                    raise HTTPException(status_code=400, detail=error_msg)
-
-        # Format based on requested format
-        if video.format == "srt":
-            formatter = SRTFormatter()
-            formatted_transcript = formatter.format_transcript(transcript)
-            return JSONResponse({
-                "success": True,
-                "format": "srt",
-                "transcript": formatted_transcript
-            })
-        elif video.format == "json":
-            # Enhanced JSON format with clickable timestamps
-            formatted_transcript = []
-            for entry in transcript:
-                formatted_transcript.append({
-                    "text": entry["text"],
-                    "start": entry["start"],
-                    "duration": entry["duration"],
-                    "timestamp": format_timestamp(entry["start"]),
-                    "link": create_youtube_link(video_id, entry["start"])
-                })
-            return JSONResponse({
-                "success": True,
-                "format": "json",
-                "transcript": formatted_transcript
-            })
-        else:
-            # Default text format with clickable timestamps
-            formatted_transcript = []
-            for entry in transcript:
-                timestamp = format_timestamp(entry["start"])
-                link = create_youtube_link(video_id, entry["start"])
-                formatted_transcript.append({
-                    "text": entry["text"],
-                    "timestamp": timestamp,
-                    "link": link
-                })
+            logger.debug("Attempting to get transcript...")
+            # Try with manual and automatic captions
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            logger.debug(f"Available transcripts: {transcript_list}")
             
-            return JSONResponse({
-                "success": True,
-                "format": "text",
-                "transcript": formatted_transcript,
-                "video_id": video_id
-            })
+            # First try manual captions
+            try:
+                transcript = transcript_list.find_manually_created_transcript().fetch()
+                logger.debug("Found manual transcript")
+            except:
+                # Then try auto-generated
+                try:
+                    transcript = transcript_list.find_generated_transcript(['en']).fetch()
+                    logger.debug("Found auto-generated transcript")
+                except:
+                    # Finally, try any available transcript and translate if needed
+                    logger.debug("Trying any available transcript...")
+                    transcript = transcript_list.find_transcript(['en']).fetch()
+                    
+            logger.debug(f"Successfully got transcript with {len(transcript)} entries")
+            
+            # Format based on requested format
+            if video.format == "srt":
+                formatter = SRTFormatter()
+                formatted_transcript = formatter.format_transcript(transcript)
+                return JSONResponse({
+                    "success": True,
+                    "format": "srt",
+                    "transcript": formatted_transcript
+                })
+            elif video.format == "json":
+                formatted_transcript = []
+                for entry in transcript:
+                    formatted_transcript.append({
+                        "text": entry["text"],
+                        "start": entry["start"],
+                        "duration": entry["duration"]
+                    })
+                return JSONResponse({
+                    "success": True,
+                    "format": "json",
+                    "transcript": formatted_transcript
+                })
+            else:
+                formatted_transcript = []
+                for entry in transcript:
+                    formatted_transcript.append({
+                        "text": entry["text"],
+                        "timestamp": format_timestamp(entry["start"]),
+                        "start": entry["start"],
+                        "link": create_youtube_link(video_id, entry["start"])
+                    })
+                
+                return JSONResponse({
+                    "success": True,
+                    "format": "text",
+                    "transcript": formatted_transcript,
+                    "video_id": video_id
+                })
+
+        except Exception as e:
+            logger.error(f"Error getting transcript: {str(e)}", exc_info=True)
+            error_msg = (
+                "Could not get transcript. This might be because:\n"
+                "1. The video has no captions available\n"
+                "2. The captions are disabled\n"
+                "3. The video is private or unavailable\n\n"
+                f"Technical details: {str(e)}"
+            )
+            raise HTTPException(status_code=400, detail=error_msg)
 
     except HTTPException as he:
         raise he
     except Exception as e:
-        error_msg = get_user_friendly_error(e, video_id if 'video_id' in locals() else 'unknown')
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=400,
-            detail=error_msg
+            status_code=500,
+            detail=f"An unexpected error occurred: {str(e)}"
         )
