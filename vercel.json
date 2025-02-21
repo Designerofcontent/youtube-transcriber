@@ -1,11 +1,17 @@
 {
   "version": 2,
-  "buildCommand": "npm run vercel-build",
+  "buildCommand": "",
+  "installCommand": "pip install -r requirements.txt",
   "outputDirectory": "public",
   "builds": [
     {
       "src": "api/main.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "buildCommand": "",
+        "installCommand": "pip install -r requirements.txt",
+        "maxLambdaSize": "15mb"
+      }
     },
     {
       "src": "index.html",
