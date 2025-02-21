@@ -1,4 +1,4 @@
-const getSubtitles = require('youtube-caption-scraper').getSubtitles;
+const getYouTubeCaptions = require('get-youtube-captions');
 
 // Helper function to extract video ID
 function getVideoId(url) {
@@ -46,36 +46,28 @@ module.exports = async (req, res) => {
     const videoId = getVideoId(url);
     
     try {
-      const subtitles = await getSubtitles({
-        videoID: videoId,
-        lang: 'en' // Try English first
+      // Try to get English captions first
+      const captions = await getYouTubeCaptions(videoId, {
+        lang: 'en',
+        format: 'text'
       });
 
-      if (!subtitles || !Array.isArray(subtitles) || subtitles.length === 0) {
-        // If English fails, try auto-generated captions
-        const autoSubtitles = await getSubtitles({
-          videoID: videoId,
-          lang: 'a.en' // Auto-generated English
+      if (!captions) {
+        // Try auto-generated captions
+        const autoCaptions = await getYouTubeCaptions(videoId, {
+          lang: 'en',
+          format: 'text',
+          auto: true
         });
 
-        if (!autoSubtitles || !Array.isArray(autoSubtitles) || autoSubtitles.length === 0) {
+        if (!autoCaptions) {
           throw new Error('No captions available for this video');
         }
 
-        const text = autoSubtitles
-          .map(item => item.text.trim())
-          .filter(text => text.length > 0)
-          .join('\n');
-
-        return res.json({ transcript: text });
+        return res.json({ transcript: autoCaptions });
       }
 
-      const text = subtitles
-        .map(item => item.text.trim())
-        .filter(text => text.length > 0)
-        .join('\n');
-
-      return res.json({ transcript: text });
+      return res.json({ transcript: captions });
     } catch (error) {
       console.error('Caption Error:', error);
       return res.status(400).json({

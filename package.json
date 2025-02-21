@@ -11,7 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "youtube-caption-scraper": "^1.0.3"
+    "get-youtube-captions": "^1.0.0"
   },
   "devDependencies": {
     "vercel": "^32.0.0"
