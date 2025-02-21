@@ -60,9 +60,13 @@ def get_user_friendly_error(e: Exception, video_id: str) -> str:
     if isinstance(e, TranscriptsDisabled):
         return (
             "This video has transcripts disabled. Try these example videos instead:\n"
-            "• TED Talk: https://www.youtube.com/watch?v=8jPQjjsBbIc\n"
-            "• Python Tutorial: https://www.youtube.com/watch?v=rfscVS0vtbw\n"
-            "• NASA Video: https://www.youtube.com/watch?v=LC7ZxqbI3Dg"
+            "• TED Talk: https://www.youtube.com/watch?v=1Evwgu369Jw\n"
+            "• Python Tutorial: https://www.youtube.com/watch?v=_uQrJ0TkZlc\n"
+            "• JavaScript Tutorial: https://www.youtube.com/watch?v=th5_9woFJmk\n\n"
+            "Note: If you need transcripts from a specific video, try:\n"
+            "1. Checking if the video has closed captions enabled\n"
+            "2. Using a video from the same channel that has captions\n"
+            "3. Looking for an alternative video with similar content"
         )
     elif isinstance(e, NoTranscriptFound):
         return (
