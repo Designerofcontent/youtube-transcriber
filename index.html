@@ -42,12 +42,27 @@
         button:hover {
             background-color: #45a049;
         }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
         #result {
             margin-top: 20px;
             white-space: pre-wrap;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-radius: 4px;
         }
         .error {
-            color: red;
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
             margin-top: 10px;
         }
     </style>
@@ -57,7 +72,7 @@
         <h1>YouTube Transcript Fetcher</h1>
         <p>Enter a YouTube video URL or ID to get its transcript:</p>
         <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=...">
-        <button onclick="getTranscript()">Get Transcript</button>
+        <button onclick="getTranscript()" id="submitButton">Get Transcript</button>
         <div id="result"></div>
     </div>
 
@@ -65,6 +80,7 @@
         async function getTranscript() {
             const urlInput = document.getElementById('urlInput');
             const resultDiv = document.getElementById('result');
+            const submitButton = document.getElementById('submitButton');
             const url = urlInput.value.trim();
 
             if (!url) {
@@ -72,8 +88,11 @@
                 return;
             }
 
+            // Disable button and show loading
+            submitButton.disabled = true;
+            resultDiv.innerHTML = '<div class="loading">Fetching transcript...</div>';
+
             try {
-                resultDiv.innerHTML = 'Loading...';
                 const response = await fetch('/api/transcript', {
                     method: 'POST',
                     headers: {
@@ -83,15 +102,29 @@
                 });
 
                 const data = await response.json();
+                
                 if (data.error) {
-                    resultDiv.innerHTML = `<div class="error">${data.error}</div>`;
+                    resultDiv.innerHTML = `<div class="error">${data.error}${data.details ? '<br>' + data.details : ''}</div>`;
+                } else if (data.transcript) {
+                    resultDiv.innerHTML = `<pre>${data.transcript}</pre>`;
                 } else {
-                    resultDiv.innerHTML = data.transcript;
+                    resultDiv.innerHTML = '<div class="error">Unexpected response format</div>';
                 }
             } catch (error) {
+                console.error('Error:', error);
                 resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            } finally {
+                // Re-enable button
+                submitButton.disabled = false;
             }
         }
+
+        // Also trigger on Enter key
+        document.getElementById('urlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                getTranscript();
+            }
+        });
     </script>
 </body>
 </html>
