@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
 import re
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -21,7 +21,11 @@ app.add_middleware(
 
 class VideoURL(BaseModel):
     url: str
-    format: Optional[str] = "text"  # Can be "text", "srt", or "json"
+    format: Optional[str] = "text"
+
+@app.get("/")
+async def root():
+    return HTMLResponse("<h1>YouTube Transcriber API</h1>")
 
 def extract_video_id(url: str) -> str:
     """Extract video ID from various YouTube URL formats."""
@@ -53,17 +57,22 @@ async def get_transcript(video: VideoURL):
     try:
         video_id = extract_video_id(video.url)
         
-        # First try to get English transcript
         try:
+            # First try to get English transcript
             transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en'])
-        except:
-            # If English fails, try auto-generated English
+        except Exception as e1:
             try:
+                # If English fails, try auto-generated English
                 transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['en-US'])
-            except:
-                # If that fails too, get all available transcripts and use the first one
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-                transcript = transcript_list.find_transcript(['en']).translate('en').fetch()
+            except Exception as e2:
+                try:
+                    # If that fails too, get all available transcripts and use the first one
+                    transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+                    transcript = transcript_list.find_transcript(['en']).translate('en').fetch()
+                except Exception as e3:
+                    # If all attempts fail, return a detailed error
+                    error_details = f"Failed to get transcript. Errors: {str(e1)} | {str(e2)} | {str(e3)}"
+                    raise HTTPException(status_code=400, detail=error_details)
 
         # Format based on requested format
         if video.format == "srt":
@@ -109,8 +118,10 @@ async def get_transcript(video: VideoURL):
                 "video_id": video_id
             })
 
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(
             status_code=400,
-            detail=str(e)
+            detail=f"Error processing request: {str(e)}"
         )
