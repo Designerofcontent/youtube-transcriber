@@ -1,4 +1,4 @@
-const getYouTubeCaptions = require('get-youtube-captions');
+const axios = require('axios');
 
 // Helper function to extract video ID
 function getVideoId(url) {
@@ -11,6 +11,45 @@ function getVideoId(url) {
     throw new Error('Could not extract video ID from URL');
   } catch (error) {
     throw new Error('Invalid YouTube URL format');
+  }
+}
+
+async function getTranscript(videoId) {
+  try {
+    // First get video info
+    const videoInfoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const { data: videoPage } = await axios.get(videoInfoUrl);
+
+    // Extract caption track URLs
+    const captionTrackPattern = /"captionTracks":\[(.*?)\]/;
+    const match = videoPage.match(captionTrackPattern);
+    if (!match) {
+      throw new Error('No captions found');
+    }
+
+    const captionTracks = JSON.parse(`[${match[1]}]`);
+    const englishTrack = captionTracks.find(
+      track => track.languageCode === 'en' || track.languageCode.startsWith('en-')
+    );
+
+    if (!englishTrack) {
+      throw new Error('No English captions available');
+    }
+
+    // Get caption track content
+    const { data: captionData } = await axios.get(englishTrack.baseUrl);
+    
+    // Parse XML caption data
+    const lines = captionData.match(/<text[^>]*>(.*?)<\/text>/g)
+      .map(line => {
+        const text = line.match(/<text[^>]*>(.*?)<\/text>/)[1];
+        return decodeURIComponent(text.replace(/&#39;/g, "'").replace(/&quot;/g, '"'));
+      })
+      .filter(text => text.trim().length > 0);
+
+    return lines.join('\n');
+  } catch (error) {
+    throw new Error('Failed to fetch transcript: ' + error.message);
   }
 }
 
@@ -46,33 +85,13 @@ module.exports = async (req, res) => {
     const videoId = getVideoId(url);
     
     try {
-      // Try to get English captions first
-      const captions = await getYouTubeCaptions(videoId, {
-        lang: 'en',
-        format: 'text'
-      });
-
-      if (!captions) {
-        // Try auto-generated captions
-        const autoCaptions = await getYouTubeCaptions(videoId, {
-          lang: 'en',
-          format: 'text',
-          auto: true
-        });
-
-        if (!autoCaptions) {
-          throw new Error('No captions available for this video');
-        }
-
-        return res.json({ transcript: autoCaptions });
-      }
-
-      return res.json({ transcript: captions });
+      const transcript = await getTranscript(videoId);
+      return res.json({ transcript });
     } catch (error) {
-      console.error('Caption Error:', error);
+      console.error('Transcript Error:', error);
       return res.status(400).json({
         error: 'Failed to get transcript',
-        details: 'Make sure the video exists and has captions available'
+        details: error.message
       });
     }
   } catch (error) {
