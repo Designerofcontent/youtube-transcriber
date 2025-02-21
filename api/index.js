@@ -16,48 +16,35 @@ function getVideoId(url) {
 
 async function getTranscript(videoId) {
   try {
-    // Get video page with specific headers to mimic browser
-    const videoInfoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const { data: videoPage } = await axios.get(videoInfoUrl, {
+    // First get video captions metadata
+    const captionsUrl = `https://youtube.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${process.env.YOUTUBE_API_KEY}`;
+    const { data: captionsData } = await axios.get(captionsUrl);
+
+    if (!captionsData.items || captionsData.items.length === 0) {
+      throw new Error('No captions available for this video');
+    }
+
+    // Find English captions
+    const englishCaption = captionsData.items.find(
+      caption => caption.snippet.language === 'en' || caption.snippet.language.startsWith('en-')
+    );
+
+    if (!englishCaption) {
+      throw new Error('No English captions available');
+    }
+
+    // Get the actual transcript
+    const transcriptUrl = `https://youtube.googleapis.com/youtube/v3/captions/${englishCaption.id}?key=${process.env.YOUTUBE_API_KEY}`;
+    const { data: transcript } = await axios.get(transcriptUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
+        Authorization: `Bearer ${process.env.YOUTUBE_ACCESS_TOKEN}`
       }
     });
 
-    // Try to find the new format first
-    const ytInitialData = videoPage.match(/ytInitialData\s*=\s*({.+?});/);
-    if (!ytInitialData) {
-      throw new Error('Could not find video data');
-    }
-
-    const data = JSON.parse(ytInitialData[1]);
-    const transcriptData = data?.playerOverlays?.playerOverlayRenderer?.decoratedPlayerBarRenderer?.decoratedPlayerBarRenderer?.playerBar?.multiMarkersPlayerBarRenderer?.markersMap?.[0]?.value?.chapters;
-
-    if (!transcriptData) {
-      // Try alternative path for captions
-      const captionsPath = data?.engagementPanels?.find(panel => 
-        panel?.engagementPanelSectionListRenderer?.content?.transcriptRenderer
-      );
-
-      if (!captionsPath) {
-        throw new Error('No captions found');
-      }
-
-      const transcriptLines = captionsPath.engagementPanelSectionListRenderer.content
-        .transcriptRenderer.body.transcriptBodyRenderer.cueGroups
-        .map(group => group.transcriptCueGroupRenderer.cues[0].transcriptCueRenderer.cue.simpleText);
-
-      return transcriptLines.join('\n');
-    }
-
-    // Process transcript data
-    return transcriptData
-      .map(chapter => chapter.chapterRenderer.title.simpleText)
-      .join('\n');
-
+    return transcript;
   } catch (error) {
-    throw new Error('Failed to fetch transcript: ' + error.message);
+    console.error('API Error:', error.response?.data || error.message);
+    throw new Error('Failed to fetch transcript: ' + (error.response?.data?.error?.message || error.message));
   }
 }
 
