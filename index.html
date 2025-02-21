@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Transcript Fetcher</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #result {
+            margin-top: 20px;
+            white-space: pre-wrap;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube Transcript Fetcher</h1>
+        <p>Enter a YouTube video URL or ID to get its transcript:</p>
+        <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=...">
+        <button onclick="getTranscript()">Get Transcript</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function getTranscript() {
+            const urlInput = document.getElementById('urlInput');
+            const resultDiv = document.getElementById('result');
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                resultDiv.innerHTML = '<div class="error">Please enter a YouTube URL</div>';
+                return;
+            }
+
+            try {
+                resultDiv.innerHTML = 'Loading...';
+                const response = await fetch('/api/transcript', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url })
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    resultDiv.innerHTML = `<div class="error">${data.error}</div>`;
+                } else {
+                    resultDiv.innerHTML = data.transcript;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

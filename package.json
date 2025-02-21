@@ -1,0 +1,19 @@
+{
+  "name": "youtube-transcript-api",
+  "version": "1.0.0",
+  "description": "YouTube Transcript API for Make.com",
+  "main": "index.js",
+  "scripts": {
+    "start": "vercel dev",
+    "deploy": "vercel deploy --prod"
+  },
+  "keywords": ["youtube", "transcript", "api"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "youtube-transcript": "^1.0.6"
+  },
+  "devDependencies": {
+    "vercel": "^32.0.0"
+  }
+}
