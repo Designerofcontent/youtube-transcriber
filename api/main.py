@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 from pydantic import BaseModel
 import re
-from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled, VideoUnavailable
 from youtube_transcript_api.formatters import TextFormatter, SRTFormatter
 from typing import Optional
 import json
@@ -37,7 +37,10 @@ def extract_video_id(url: str) -> str:
         match = re.search(pattern, url)
         if match:
             return match.group(1)
-    raise HTTPException(status_code=400, detail="Could not extract video ID from URL")
+    raise HTTPException(
+        status_code=400, 
+        detail="Could not extract video ID from URL. Please make sure you're using a valid YouTube URL."
+    )
 
 def format_timestamp(seconds: float) -> str:
     """Convert seconds to HH:MM:SS format."""
@@ -51,6 +54,27 @@ def format_timestamp(seconds: float) -> str:
 def create_youtube_link(video_id: str, timestamp: float) -> str:
     """Create a YouTube link that starts at a specific timestamp."""
     return f"https://youtube.com/watch?v={video_id}&t={int(timestamp)}s"
+
+def get_user_friendly_error(e: Exception, video_id: str) -> str:
+    """Convert API errors to user-friendly messages."""
+    if isinstance(e, TranscriptsDisabled):
+        return (
+            "This video has transcripts disabled. Try these example videos instead:\n"
+            "• TED Talk: https://www.youtube.com/watch?v=8jPQjjsBbIc\n"
+            "• Python Tutorial: https://www.youtube.com/watch?v=rfscVS0vtbw\n"
+            "• NASA Video: https://www.youtube.com/watch?v=LC7ZxqbI3Dg"
+        )
+    elif isinstance(e, NoTranscriptFound):
+        return (
+            "No English transcript found for this video. The video might:\n"
+            "1. Not have any captions\n"
+            "2. Only have auto-generated captions which are not accessible\n"
+            "3. Have captions in other languages only"
+        )
+    elif isinstance(e, VideoUnavailable):
+        return f"The video ID {video_id} does not exist or is private."
+    else:
+        return str(e)
 
 @app.post("/api/transcript")
 async def get_transcript(video: VideoURL):
@@ -70,9 +94,9 @@ async def get_transcript(video: VideoURL):
                     transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
                     transcript = transcript_list.find_transcript(['en']).translate('en').fetch()
                 except Exception as e3:
-                    # If all attempts fail, return a detailed error
-                    error_details = f"Failed to get transcript. Errors: {str(e1)} | {str(e2)} | {str(e3)}"
-                    raise HTTPException(status_code=400, detail=error_details)
+                    # Get a user-friendly error message
+                    error_msg = get_user_friendly_error(e3, video_id)
+                    raise HTTPException(status_code=400, detail=error_msg)
 
         # Format based on requested format
         if video.format == "srt":
@@ -121,7 +145,8 @@ async def get_transcript(video: VideoURL):
     except HTTPException as he:
         raise he
     except Exception as e:
+        error_msg = get_user_friendly_error(e, video_id if 'video_id' in locals() else 'unknown')
         raise HTTPException(
             status_code=400,
-            detail=f"Error processing request: {str(e)}"
+            detail=error_msg
         )

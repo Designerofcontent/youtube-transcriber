@@ -11,6 +11,7 @@
             margin: 20px auto;
             padding: 0 20px;
             line-height: 1.6;
+            background-color: #f9f9f9;
         }
         .container {
             background: white;
@@ -21,6 +22,7 @@
         h1 {
             color: #333;
             text-align: center;
+            margin-bottom: 10px;
         }
         input[type="text"] {
             width: 100%;
@@ -45,11 +47,12 @@
             background: #45a049;
         }
         .error {
-            color: #ff0000;
+            color: #d32f2f;
             background: #ffebee;
-            padding: 10px;
+            padding: 15px;
             border-radius: 4px;
             margin: 10px 0;
+            white-space: pre-wrap;
         }
         .loading {
             text-align: center;
@@ -99,6 +102,31 @@
             border-radius: 4px;
             margin-top: 10px;
         }
+        .examples {
+            margin: 20px 0;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 4px;
+        }
+        .examples h3 {
+            margin-top: 0;
+            color: #1565c0;
+        }
+        .examples ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+        }
+        .examples li {
+            margin: 10px 0;
+        }
+        .examples a {
+            color: #1a73e8;
+            text-decoration: none;
+        }
+        .examples a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
@@ -112,11 +140,24 @@
             <button onclick="downloadTranscript('srt')" class="download-btn">Download as SRT</button>
             <button onclick="downloadTranscript('json')" class="download-btn">Download as JSON</button>
         </div>
+        <div class="examples">
+            <h3>Try these example videos:</h3>
+            <ul>
+                <li>• <a href="#" onclick="tryExample('https://www.youtube.com/watch?v=8jPQjjsBbIc')">TED Talk: The Power of Vulnerability</a></li>
+                <li>• <a href="#" onclick="tryExample('https://www.youtube.com/watch?v=rfscVS0vtbw')">Python Tutorial for Beginners</a></li>
+                <li>• <a href="#" onclick="tryExample('https://www.youtube.com/watch?v=LC7ZxqbI3Dg')">NASA: A View From Space</a></li>
+            </ul>
+        </div>
         <div id="result"></div>
     </div>
 
     <script>
         let lastTranscript = null;
+
+        function tryExample(url) {
+            document.getElementById('urlInput').value = url;
+            getTranscript('text');
+        }
 
         function downloadTranscript(format) {
             if (!lastTranscript) {
@@ -149,11 +190,10 @@
                 });
 
                 const data = await response.json();
-                console.log('API Response:', data);
 
                 if (response.ok) {
                     if (data.error) {
-                        resultDiv.innerHTML = `<div class="error">Error: ${data.error}<br>Details: ${data.detail}</div>`;
+                        resultDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
                     } else {
                         lastTranscript = data;
                         
@@ -197,11 +237,11 @@
                         }
                     }
                 } else {
-                    resultDiv.innerHTML = `<div class="error">Error: ${data.detail}</div>`;
+                    resultDiv.innerHTML = `<div class="error">${data.detail}</div>`;
                 }
             } catch (error) {
                 console.error('Fetch error:', error);
-                resultDiv.innerHTML = `<div class="error">Failed to get transcript<br>${error.message}</div>`;
+                resultDiv.innerHTML = `<div class="error">Failed to get transcript:\n${error.message}</div>`;
             }
         }
 
