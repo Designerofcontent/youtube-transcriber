@@ -16,38 +16,46 @@ function getVideoId(url) {
 
 async function getTranscript(videoId) {
   try {
-    // First get video info
+    // Get video page with specific headers to mimic browser
     const videoInfoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const { data: videoPage } = await axios.get(videoInfoUrl);
+    const { data: videoPage } = await axios.get(videoInfoUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
 
-    // Extract caption track URLs
-    const captionTrackPattern = /"captionTracks":\[(.*?)\]/;
-    const match = videoPage.match(captionTrackPattern);
-    if (!match) {
-      throw new Error('No captions found');
+    // Try to find the new format first
+    const ytInitialData = videoPage.match(/ytInitialData\s*=\s*({.+?});/);
+    if (!ytInitialData) {
+      throw new Error('Could not find video data');
     }
 
-    const captionTracks = JSON.parse(`[${match[1]}]`);
-    const englishTrack = captionTracks.find(
-      track => track.languageCode === 'en' || track.languageCode.startsWith('en-')
-    );
+    const data = JSON.parse(ytInitialData[1]);
+    const transcriptData = data?.playerOverlays?.playerOverlayRenderer?.decoratedPlayerBarRenderer?.decoratedPlayerBarRenderer?.playerBar?.multiMarkersPlayerBarRenderer?.markersMap?.[0]?.value?.chapters;
 
-    if (!englishTrack) {
-      throw new Error('No English captions available');
+    if (!transcriptData) {
+      // Try alternative path for captions
+      const captionsPath = data?.engagementPanels?.find(panel => 
+        panel?.engagementPanelSectionListRenderer?.content?.transcriptRenderer
+      );
+
+      if (!captionsPath) {
+        throw new Error('No captions found');
+      }
+
+      const transcriptLines = captionsPath.engagementPanelSectionListRenderer.content
+        .transcriptRenderer.body.transcriptBodyRenderer.cueGroups
+        .map(group => group.transcriptCueGroupRenderer.cues[0].transcriptCueRenderer.cue.simpleText);
+
+      return transcriptLines.join('\n');
     }
 
-    // Get caption track content
-    const { data: captionData } = await axios.get(englishTrack.baseUrl);
-    
-    // Parse XML caption data
-    const lines = captionData.match(/<text[^>]*>(.*?)<\/text>/g)
-      .map(line => {
-        const text = line.match(/<text[^>]*>(.*?)<\/text>/)[1];
-        return decodeURIComponent(text.replace(/&#39;/g, "'").replace(/&quot;/g, '"'));
-      })
-      .filter(text => text.trim().length > 0);
+    // Process transcript data
+    return transcriptData
+      .map(chapter => chapter.chapterRenderer.title.simpleText)
+      .join('\n');
 
-    return lines.join('\n');
   } catch (error) {
     throw new Error('Failed to fetch transcript: ' + error.message);
   }
