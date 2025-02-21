@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Transcript Fetcher</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #result {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-radius: 4px;
+        }
+        .error {
+            color: #d32f2f;
+            background-color: #ffebee;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>YouTube Transcript Fetcher</h1>
+        <p>Enter a YouTube video URL or ID to get its transcript:</p>
+        <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=...">
+        <button onclick="getTranscript()" id="submitButton">Get Transcript</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function getTranscript() {
+            const urlInput = document.getElementById('urlInput');
+            const resultDiv = document.getElementById('result');
+            const submitButton = document.getElementById('submitButton');
+            const url = urlInput.value.trim();
+
+            if (!url) {
+                resultDiv.innerHTML = '<div class="error">Please enter a YouTube URL</div>';
+                return;
+            }
+
+            // Disable button and show loading
+            submitButton.disabled = true;
+            resultDiv.innerHTML = '<div class="loading">Fetching transcript...</div>';
+
+            try {
+                const response = await fetch('/api', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url })
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    resultDiv.innerHTML = `<div class="error">${data.error}${data.details ? '<br>' + data.details : ''}</div>`;
+                } else if (data.transcript) {
+                    resultDiv.innerHTML = `<pre>${data.transcript}</pre>`;
+                } else {
+                    resultDiv.innerHTML = '<div class="error">Unexpected response format</div>';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            } finally {
+                // Re-enable button
+                submitButton.disabled = false;
+            }
+        }
+
+        // Also trigger on Enter key
+        document.getElementById('urlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                getTranscript();
+            }
+        });
+    </script>
+</body>
+</html>

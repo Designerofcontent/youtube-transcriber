@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "vercel dev",
+    "vercel-build": "mkdir -p public && cp index.html public/",
     "deploy": "vercel deploy --prod"
   },
   "keywords": ["youtube", "transcript", "api"],
