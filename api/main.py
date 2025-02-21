@@ -1,9 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import re
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api.formatters import TextFormatter
+from youtube_transcript_api.formatters import TextFormatter, SRTFormatter
+from typing import Optional
+import json
 
 app = FastAPI()
 
@@ -18,6 +21,7 @@ app.add_middleware(
 
 class VideoURL(BaseModel):
     url: str
+    format: Optional[str] = "text"  # Can be "text", "srt", or "json"
 
 def extract_video_id(url: str) -> str:
     """Extract video ID from various YouTube URL formats."""
@@ -30,6 +34,19 @@ def extract_video_id(url: str) -> str:
         if match:
             return match.group(1)
     raise HTTPException(status_code=400, detail="Could not extract video ID from URL")
+
+def format_timestamp(seconds: float) -> str:
+    """Convert seconds to HH:MM:SS format."""
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    if hours > 0:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+def create_youtube_link(video_id: str, timestamp: float) -> str:
+    """Create a YouTube link that starts at a specific timestamp."""
+    return f"https://youtube.com/watch?v={video_id}&t={int(timestamp)}s"
 
 @app.post("/api/transcript")
 async def get_transcript(video: VideoURL):
@@ -48,18 +65,49 @@ async def get_transcript(video: VideoURL):
                 transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
                 transcript = transcript_list.find_transcript(['en']).translate('en').fetch()
 
-        # Format transcript with timestamps
-        formatted_transcript = []
-        for entry in transcript:
-            minutes = int(entry['start'] // 60)
-            seconds = int(entry['start'] % 60)
-            timestamp = f"[{minutes}:{seconds:02d}]"
-            formatted_transcript.append(f"{timestamp} {entry['text']}")
-
-        return {
-            "success": True,
-            "transcript": "\n".join(formatted_transcript)
-        }
+        # Format based on requested format
+        if video.format == "srt":
+            formatter = SRTFormatter()
+            formatted_transcript = formatter.format_transcript(transcript)
+            return JSONResponse({
+                "success": True,
+                "format": "srt",
+                "transcript": formatted_transcript
+            })
+        elif video.format == "json":
+            # Enhanced JSON format with clickable timestamps
+            formatted_transcript = []
+            for entry in transcript:
+                formatted_transcript.append({
+                    "text": entry["text"],
+                    "start": entry["start"],
+                    "duration": entry["duration"],
+                    "timestamp": format_timestamp(entry["start"]),
+                    "link": create_youtube_link(video_id, entry["start"])
+                })
+            return JSONResponse({
+                "success": True,
+                "format": "json",
+                "transcript": formatted_transcript
+            })
+        else:
+            # Default text format with clickable timestamps
+            formatted_transcript = []
+            for entry in transcript:
+                timestamp = format_timestamp(entry["start"])
+                link = create_youtube_link(video_id, entry["start"])
+                formatted_transcript.append({
+                    "text": entry["text"],
+                    "timestamp": timestamp,
+                    "link": link
+                })
+            
+            return JSONResponse({
+                "success": True,
+                "format": "text",
+                "transcript": formatted_transcript,
+                "video_id": video_id
+            })
 
     except Exception as e:
         raise HTTPException(

@@ -10,6 +10,7 @@
             max-width: 800px;
             margin: 20px auto;
             padding: 0 20px;
+            line-height: 1.6;
         }
         .container {
             background: white;
@@ -38,6 +39,7 @@
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
+            margin: 5px 0;
         }
         button:hover {
             background: #45a049;
@@ -56,15 +58,46 @@
         }
         #result {
             margin-top: 20px;
-            white-space: pre-wrap;
         }
-        .debug {
-            font-family: monospace;
-            background: #f5f5f5;
-            padding: 10px;
-            margin-top: 10px;
+        .transcript-line {
+            margin: 10px 0;
+            padding: 5px;
             border-radius: 4px;
-            font-size: 12px;
+            transition: background-color 0.2s;
+        }
+        .transcript-line:hover {
+            background-color: #f5f5f5;
+        }
+        .timestamp {
+            color: #1a73e8;
+            cursor: pointer;
+            margin-right: 10px;
+            font-family: monospace;
+        }
+        .timestamp:hover {
+            text-decoration: underline;
+        }
+        .format-buttons {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .format-buttons button {
+            flex: 1;
+        }
+        .download-btn {
+            background: #1a73e8;
+        }
+        .download-btn:hover {
+            background: #1557b0;
+        }
+        #transcript-container {
+            max-height: 500px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -73,12 +106,28 @@
         <h1>YouTube Transcript Fetcher</h1>
         <p>Enter a YouTube video URL or ID to get its transcript:</p>
         <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=..." value="">
-        <button onclick="getTranscript()">Get Transcript</button>
+        <button onclick="getTranscript('text')">Get Transcript</button>
+        <div class="format-buttons">
+            <button onclick="downloadTranscript('text')" class="download-btn">Download as Text</button>
+            <button onclick="downloadTranscript('srt')" class="download-btn">Download as SRT</button>
+            <button onclick="downloadTranscript('json')" class="download-btn">Download as JSON</button>
+        </div>
         <div id="result"></div>
     </div>
 
     <script>
-        async function getTranscript() {
+        let lastTranscript = null;
+
+        function downloadTranscript(format) {
+            if (!lastTranscript) {
+                alert('Please fetch a transcript first');
+                return;
+            }
+            
+            getTranscript(format, true);
+        }
+
+        async function getTranscript(format, isDownload = false) {
             const urlInput = document.getElementById('urlInput');
             const resultDiv = document.getElementById('result');
             const url = urlInput.value.trim();
@@ -96,24 +145,56 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ url })
+                    body: JSON.stringify({ url, format })
                 });
 
                 const data = await response.json();
-                console.log('API Response:', data); // Debug log
+                console.log('API Response:', data);
 
                 if (response.ok) {
                     if (data.error) {
                         resultDiv.innerHTML = `<div class="error">Error: ${data.error}<br>Details: ${data.detail}</div>`;
                     } else {
-                        resultDiv.innerHTML = `
-                            <h3>Transcript:</h3>
-                            <pre style="max-height: 400px; overflow-y: auto; background: #f5f5f5; padding: 10px; border-radius: 4px; white-space: pre-wrap;">${data.transcript}</pre>
-                            <div class="debug">
-                                <strong>Debug Info:</strong><br>
-                                ${JSON.stringify(data, null, 2)}
-                            </div>
-                        `;
+                        lastTranscript = data;
+                        
+                        if (isDownload) {
+                            // Handle download
+                            let content, filename, type;
+                            if (format === 'json') {
+                                content = JSON.stringify(data.transcript, null, 2);
+                                filename = 'transcript.json';
+                                type = 'application/json';
+                            } else if (format === 'srt') {
+                                content = data.transcript;
+                                filename = 'transcript.srt';
+                                type = 'text/plain';
+                            } else {
+                                content = data.transcript.map(line => `${line.timestamp} ${line.text}`).join('\n');
+                                filename = 'transcript.txt';
+                                type = 'text/plain';
+                            }
+                            
+                            const blob = new Blob([content], { type });
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = filename;
+                            a.click();
+                            window.URL.revokeObjectURL(url);
+                        } else {
+                            // Display transcript
+                            let html = '<div id="transcript-container">';
+                            data.transcript.forEach(line => {
+                                html += `
+                                    <div class="transcript-line">
+                                        <span class="timestamp" onclick="window.open('${line.link}', '_blank')">[${line.timestamp}]</span>
+                                        ${line.text}
+                                    </div>
+                                `;
+                            });
+                            html += '</div>';
+                            resultDiv.innerHTML = html;
+                        }
                     }
                 } else {
                     resultDiv.innerHTML = `<div class="error">Error: ${data.detail}</div>`;
@@ -127,7 +208,7 @@
         // Allow Enter key to submit
         document.getElementById('urlInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                getTranscript();
+                getTranscript('text');
             }
         });
     </script>
