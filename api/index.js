@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { YoutubeTranscript } = require('youtube-transcript');
 
 // Helper function to extract video ID
 function getVideoId(url) {
@@ -14,9 +15,8 @@ function getVideoId(url) {
   }
 }
 
-async function getTranscript(videoId) {
+async function getVideoInfo(videoId) {
   try {
-    // Get video details including caption info
     const videoUrl = `https://youtube.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${process.env.YOUTUBE_API_KEY}`;
     const { data: videoData } = await axios.get(videoUrl);
 
@@ -24,32 +24,41 @@ async function getTranscript(videoId) {
       throw new Error('Video not found');
     }
 
-    // Get the actual captions using a third-party service
-    const captionsUrl = `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${process.env.YOUTUBE_API_KEY}`;
-    const { data: captionsData } = await axios.get(captionsUrl);
-
-    if (!captionsData.items || captionsData.items.length === 0) {
-      throw new Error('No captions available for this video');
-    }
-
-    // Find English captions
-    const englishCaption = captionsData.items.find(
-      caption => caption.snippet.language === 'en' || caption.snippet.language.startsWith('en-')
-    );
-
-    if (!englishCaption) {
-      throw new Error('No English captions available');
-    }
-
     return {
       title: videoData.items[0].snippet.title,
-      captionId: englishCaption.id,
-      language: englishCaption.snippet.language
+      description: videoData.items[0].snippet.description,
+      publishedAt: videoData.items[0].snippet.publishedAt
     };
-
   } catch (error) {
-    console.error('API Error:', error.response?.data || error.message);
-    throw new Error('Failed to fetch transcript: ' + (error.response?.data?.error?.message || error.message));
+    console.error('Video Info Error:', error.response?.data || error.message);
+    throw new Error('Failed to fetch video info: ' + (error.response?.data?.error?.message || error.message));
+  }
+}
+
+async function getTranscript(videoId) {
+  try {
+    // Get video info first
+    const videoInfo = await getVideoInfo(videoId);
+    
+    // Then get transcript
+    const transcriptList = await YoutubeTranscript.fetchTranscript(videoId);
+    if (!transcriptList || transcriptList.length === 0) {
+      throw new Error('No transcript available');
+    }
+
+    // Format transcript
+    const transcript = transcriptList
+      .map(item => item.text.trim())
+      .filter(text => text.length > 0)
+      .join('\n');
+
+    return {
+      ...videoInfo,
+      transcript
+    };
+  } catch (error) {
+    console.error('Transcript Error:', error);
+    throw new Error('Failed to fetch transcript: ' + error.message);
   }
 }
 
@@ -85,8 +94,8 @@ module.exports = async (req, res) => {
     const videoId = getVideoId(url);
     
     try {
-      const transcriptInfo = await getTranscript(videoId);
-      return res.json(transcriptInfo);
+      const result = await getTranscript(videoId);
+      return res.json(result);
     } catch (error) {
       console.error('Transcript Error:', error);
       return res.status(400).json({

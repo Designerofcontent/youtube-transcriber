@@ -108,9 +108,10 @@
                     } else {
                         resultDiv.innerHTML = `
                             <h3>Video Information:</h3>
-                            <p>Title: ${data.title}</p>
-                            <p>Language: ${data.language}</p>
-                            <p>Caption ID: ${data.captionId}</p>
+                            <p><strong>Title:</strong> ${data.title}</p>
+                            <p><strong>Published:</strong> ${new Date(data.publishedAt).toLocaleDateString()}</p>
+                            <h3>Transcript:</h3>
+                            <pre>${data.transcript}</pre>
                             <div class="debug">
                                 <strong>Debug Info:</strong><br>
                                 ${JSON.stringify(data, null, 2)}
