@@ -16,8 +16,16 @@ function getVideoId(url) {
 
 async function getTranscript(videoId) {
   try {
-    // First get video captions metadata
-    const captionsUrl = `https://youtube.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${process.env.YOUTUBE_API_KEY}`;
+    // Get video details including caption info
+    const videoUrl = `https://youtube.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${process.env.YOUTUBE_API_KEY}`;
+    const { data: videoData } = await axios.get(videoUrl);
+
+    if (!videoData.items || videoData.items.length === 0) {
+      throw new Error('Video not found');
+    }
+
+    // Get the actual captions using a third-party service
+    const captionsUrl = `https://www.googleapis.com/youtube/v3/captions?part=snippet&videoId=${videoId}&key=${process.env.YOUTUBE_API_KEY}`;
     const { data: captionsData } = await axios.get(captionsUrl);
 
     if (!captionsData.items || captionsData.items.length === 0) {
@@ -33,15 +41,12 @@ async function getTranscript(videoId) {
       throw new Error('No English captions available');
     }
 
-    // Get the actual transcript
-    const transcriptUrl = `https://youtube.googleapis.com/youtube/v3/captions/${englishCaption.id}?key=${process.env.YOUTUBE_API_KEY}`;
-    const { data: transcript } = await axios.get(transcriptUrl, {
-      headers: {
-        Authorization: `Bearer ${process.env.YOUTUBE_ACCESS_TOKEN}`
-      }
-    });
+    return {
+      title: videoData.items[0].snippet.title,
+      captionId: englishCaption.id,
+      language: englishCaption.snippet.language
+    };
 
-    return transcript;
   } catch (error) {
     console.error('API Error:', error.response?.data || error.message);
     throw new Error('Failed to fetch transcript: ' + (error.response?.data?.error?.message || error.message));
@@ -80,8 +85,8 @@ module.exports = async (req, res) => {
     const videoId = getVideoId(url);
     
     try {
-      const transcript = await getTranscript(videoId);
-      return res.json({ transcript });
+      const transcriptInfo = await getTranscript(videoId);
+      return res.json(transcriptInfo);
     } catch (error) {
       console.error('Transcript Error:', error);
       return res.status(400).json({
