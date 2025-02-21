@@ -1,0 +1,4 @@
+youtube-transcript-api==0.6.1
+fastapi==0.104.1
+uvicorn==0.24.0
+python-dotenv==1.0.0
