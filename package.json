@@ -14,7 +14,7 @@
   "dependencies": {
     "axios": "^0.21.1",
     "dotenv": "^16.0.0",
-    "youtube-caption-scraper": "^1.0.3"
+    "node-youtube-captions": "^0.1.1"
   },
   "devDependencies": {
     "vercel": "^32.0.0"
