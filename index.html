@@ -8,12 +8,11 @@
         body {
             font-family: Arial, sans-serif;
             max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+            margin: 20px auto;
+            padding: 0 20px;
         }
         .container {
-            background-color: white;
+            background: white;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -31,39 +30,41 @@
             box-sizing: border-box;
         }
         button {
-            background-color: #4CAF50;
+            width: 100%;
+            padding: 10px;
+            background: #4CAF50;
             color: white;
-            padding: 10px 20px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            width: 100%;
+            font-size: 16px;
         }
         button:hover {
-            background-color: #45a049;
-        }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        #result {
-            margin-top: 20px;
-            white-space: pre-wrap;
-            padding: 10px;
-            background-color: #f8f8f8;
-            border-radius: 4px;
+            background: #45a049;
         }
         .error {
-            color: #d32f2f;
-            background-color: #ffebee;
+            color: #ff0000;
+            background: #ffebee;
             padding: 10px;
             border-radius: 4px;
-            margin-top: 10px;
+            margin: 10px 0;
         }
         .loading {
             text-align: center;
             color: #666;
+            padding: 20px;
+        }
+        #result {
+            margin-top: 20px;
+            white-space: pre-wrap;
+        }
+        .debug {
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 10px;
             margin-top: 10px;
+            border-radius: 4px;
+            font-size: 12px;
         }
     </style>
 </head>
@@ -71,8 +72,8 @@
     <div class="container">
         <h1>YouTube Transcript Fetcher</h1>
         <p>Enter a YouTube video URL or ID to get its transcript:</p>
-        <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=...">
-        <button onclick="getTranscript()" id="submitButton">Get Transcript</button>
+        <input type="text" id="urlInput" placeholder="https://www.youtube.com/watch?v=..." value="">
+        <button onclick="getTranscript()">Get Transcript</button>
         <div id="result"></div>
     </div>
 
@@ -80,7 +81,6 @@
         async function getTranscript() {
             const urlInput = document.getElementById('urlInput');
             const resultDiv = document.getElementById('result');
-            const submitButton = document.getElementById('submitButton');
             const url = urlInput.value.trim();
 
             if (!url) {
@@ -88,8 +88,6 @@
                 return;
             }
 
-            // Disable button and show loading
-            submitButton.disabled = true;
             resultDiv.innerHTML = '<div class="loading">Fetching transcript...</div>';
 
             try {
@@ -102,24 +100,33 @@
                 });
 
                 const data = await response.json();
-                
-                if (data.error) {
-                    resultDiv.innerHTML = `<div class="error">${data.error}${data.details ? '<br>' + data.details : ''}</div>`;
-                } else if (data.transcript) {
-                    resultDiv.innerHTML = `<pre>${data.transcript}</pre>`;
+                console.log('API Response:', data); // Debug log
+
+                if (response.ok) {
+                    if (data.error) {
+                        resultDiv.innerHTML = `<div class="error">Error: ${data.error}<br>Details: ${data.details}</div>`;
+                    } else {
+                        resultDiv.innerHTML = `
+                            <h3>Video Information:</h3>
+                            <p>Title: ${data.title}</p>
+                            <p>Language: ${data.language}</p>
+                            <p>Caption ID: ${data.captionId}</p>
+                            <div class="debug">
+                                <strong>Debug Info:</strong><br>
+                                ${JSON.stringify(data, null, 2)}
+                            </div>
+                        `;
+                    }
                 } else {
-                    resultDiv.innerHTML = '<div class="error">Unexpected response format</div>';
+                    resultDiv.innerHTML = `<div class="error">Error: ${data.error}<br>Details: ${data.details}</div>`;
                 }
             } catch (error) {
-                console.error('Error:', error);
-                resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
-            } finally {
-                // Re-enable button
-                submitButton.disabled = false;
+                console.error('Fetch error:', error);
+                resultDiv.innerHTML = `<div class="error">Failed to get transcript<br>${error.message}</div>`;
             }
         }
 
-        // Also trigger on Enter key
+        // Allow Enter key to submit
         document.getElementById('urlInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 getTranscript();
