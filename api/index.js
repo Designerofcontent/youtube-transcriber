@@ -1,5 +1,4 @@
 const axios = require('axios');
-const { YoutubeTranscript } = require('youtube-transcript');
 
 // Helper function to extract video ID
 function getVideoId(url) {
@@ -15,51 +14,74 @@ function getVideoId(url) {
   }
 }
 
-async function getVideoInfo(videoId) {
-  try {
-    const videoUrl = `https://youtube.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${process.env.YOUTUBE_API_KEY}`;
-    const { data: videoData } = await axios.get(videoUrl);
-
-    if (!videoData.items || videoData.items.length === 0) {
-      throw new Error('Video not found');
-    }
-
-    return {
-      title: videoData.items[0].snippet.title,
-      description: videoData.items[0].snippet.description,
-      publishedAt: videoData.items[0].snippet.publishedAt
-    };
-  } catch (error) {
-    console.error('Video Info Error:', error.response?.data || error.message);
-    throw new Error('Failed to fetch video info: ' + (error.response?.data?.error?.message || error.message));
-  }
-}
-
 async function getTranscript(videoId) {
   try {
-    // Get video info first
-    const videoInfo = await getVideoInfo(videoId);
-    
-    // Then get transcript
-    const transcriptList = await YoutubeTranscript.fetchTranscript(videoId);
-    if (!transcriptList || transcriptList.length === 0) {
-      throw new Error('No transcript available');
+    // First get the video page
+    const response = await axios.get(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9'
+      }
+    });
+
+    // Extract initial data
+    const match = response.data.match(/ytInitialData\s*=\s*({.+?});/);
+    if (!match) {
+      throw new Error('Could not find video data');
     }
 
-    // Format transcript
-    const transcript = transcriptList
-      .map(item => item.text.trim())
-      .filter(text => text.length > 0)
+    const data = JSON.parse(match[1]);
+
+    // Get video title
+    const title = data?.playerOverlays?.playerOverlayRenderer?.videoTitle?.simpleText
+      || data?.microformat?.playerMicroformatRenderer?.title?.simpleText
+      || 'Unknown Title';
+
+    // Find transcript in engagement panels
+    const transcriptPanel = data.engagementPanels?.find(panel => 
+      panel?.engagementPanelSectionListRenderer?.content?.transcriptRenderer ||
+      panel?.engagementPanelSectionListRenderer?.content?.transcriptSearchPanelRenderer
+    );
+
+    if (!transcriptPanel) {
+      throw new Error('No transcript panel found');
+    }
+
+    // Extract transcript
+    const transcriptRenderer = transcriptPanel.engagementPanelSectionListRenderer.content.transcriptRenderer;
+    if (!transcriptRenderer) {
+      throw new Error('No transcript available for this video');
+    }
+
+    const transcriptLines = transcriptRenderer.body.transcriptBodyRenderer.cueGroups
+      .map(group => {
+        const cue = group.transcriptCueGroupRenderer.cues[0].transcriptCueRenderer;
+        return {
+          text: cue.cue.simpleText,
+          startTime: parseFloat(cue.startOffsetMs) / 1000
+        };
+      });
+
+    // Format transcript with timestamps
+    const transcript = transcriptLines
+      .map(line => `[${formatTime(line.startTime)}] ${line.text}`)
       .join('\n');
 
     return {
-      ...videoInfo,
+      title,
       transcript
     };
   } catch (error) {
-    console.error('Transcript Error:', error);
+    console.error('Error:', error);
     throw new Error('Failed to fetch transcript: ' + error.message);
   }
+}
+
+// Helper function to format time
+function formatTime(seconds) {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
 module.exports = async (req, res) => {
