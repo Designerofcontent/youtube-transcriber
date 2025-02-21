@@ -1,4 +1,4 @@
-const { YoutubeTranscript } = require('youtube-transcript');
+const getSubtitles = require('youtube-caption-scraper').getSubtitles;
 
 // Helper function to extract video ID
 function getVideoId(url) {
@@ -44,26 +44,49 @@ module.exports = async (req, res) => {
     }
 
     const videoId = getVideoId(url);
-    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
     
-    if (!transcript || !Array.isArray(transcript)) {
-      throw new Error('Invalid transcript format received');
+    try {
+      const subtitles = await getSubtitles({
+        videoID: videoId,
+        lang: 'en' // Try English first
+      });
+
+      if (!subtitles || !Array.isArray(subtitles) || subtitles.length === 0) {
+        // If English fails, try auto-generated captions
+        const autoSubtitles = await getSubtitles({
+          videoID: videoId,
+          lang: 'a.en' // Auto-generated English
+        });
+
+        if (!autoSubtitles || !Array.isArray(autoSubtitles) || autoSubtitles.length === 0) {
+          throw new Error('No captions available for this video');
+        }
+
+        const text = autoSubtitles
+          .map(item => item.text.trim())
+          .filter(text => text.length > 0)
+          .join('\n');
+
+        return res.json({ transcript: text });
+      }
+
+      const text = subtitles
+        .map(item => item.text.trim())
+        .filter(text => text.length > 0)
+        .join('\n');
+
+      return res.json({ transcript: text });
+    } catch (error) {
+      console.error('Caption Error:', error);
+      return res.status(400).json({
+        error: 'Failed to get transcript',
+        details: 'Make sure the video exists and has captions available'
+      });
     }
-
-    const text = transcript
-      .map(item => item.text.trim())
-      .filter(text => text.length > 0)
-      .join('\n');
-
-    if (!text) {
-      throw new Error('No transcript text found');
-    }
-
-    return res.json({ transcript: text });
   } catch (error) {
     console.error('Error:', error);
     return res.status(400).json({
-      error: 'Failed to get transcript',
+      error: 'Failed to process request',
       details: error.message
     });
   }
